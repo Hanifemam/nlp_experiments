@@ -17,7 +17,7 @@ apple_type_prediction/temp_data/
 **/outputs/
 **/plots/
 **/logs/
-
+*.txt
 # Large artifacts
 *.pth
 *.pt
