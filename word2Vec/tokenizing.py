@@ -2,12 +2,10 @@ import torch
 import torch.nn as nn
 import re
 
-class Dictionary ():
+class CorpusBuilder():
     
-    def __init__(self, dim=128):
+    def __init__(self):
         self.dataset_dir = "word2Vec/dataset.txt"
-        self.stoi = dict()
-        self.itos = dict()
         
     def read_file(self):
         with open(self.dataset_dir, 'r') as f:
@@ -27,6 +25,18 @@ class Dictionary ():
     def tokenizer(self, content_list:list):
         return [sentence.split(' ') for sentence in content_list]
     
+    def get_tokenized_list(self):
+        content = self.read_file()
+        cleaned_content = self.sentence_cleaning(content)
+        content_list = self.sentence_to_list(cleaned_content)
+        return self.tokenizer(content_list)
+
+class Vocabulary(): 
+    def __init__(self, tokenized_list):
+        self.stoi = dict()
+        self.itos = dict()
+        self.tokenized_list = tokenized_list
+        
     def vocabulary_generation(self, tokenized_list):
         id_number = 0
         min_frequency = 3
@@ -56,17 +66,12 @@ class Dictionary ():
         return word_counter
     
     def get_vocabulary(self):
-        content = self.read_file()
-        cleaned_content = self.sentence_cleaning(content)
-        content_list = self.sentence_to_list(cleaned_content)
-        vertorized = self.tokenizer(content_list)
-        return self.vocabulary_generation(vertorized)
+        return self.vocabulary_generation(self.tokenized_list)
         
             
 if __name__ == "__main__":
     def main():
-        word2vec = Dictionary()
-        print(word2vec.get_vocabulary())
+        print(Vocabulary(CorpusBuilder().get_tokenized_list()).get_vocabulary())
         
     main()
         
