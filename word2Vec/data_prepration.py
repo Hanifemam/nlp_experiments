@@ -4,8 +4,8 @@ import re
 
 class CorpusBuilder():
     
-    def __init__(self):
-        self.dataset_dir = "word2Vec/dataset.txt"
+    def __init__(self, dataset_dir = "word2Vec/dataset.txt"):
+        self.dataset_dir = dataset_dir
         
     def read_file(self):
         with open(self.dataset_dir, 'r') as f:
