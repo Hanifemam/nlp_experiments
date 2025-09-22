@@ -63,7 +63,7 @@ class CBOW(nn.Module):
         logits = h @ self.W_out                               
         return logits
     
-    def get_embeddings(self, kind: str = "in", normalize: bool = False):
+    def get_embeddings(self):
         E = self.W_in
         return E.detach()
     

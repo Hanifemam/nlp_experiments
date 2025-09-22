@@ -1,27 +1,95 @@
+import torch
+from torch import nn
+from tqdm.auto import tqdm
+from skipgram_dataloader import PrecomputedSkipGramDataset, SkipGramDataLoader
 
-from data_prepration import CorpusBuilder, Vocabulary
+class Model():
+    def __init__(self, file_dir="word2Vec/dataset.txt", context_words=4, batch_size=8,
+                 shuffle=True, embeding_size=128, epochs=10):
+        self.epochs = epochs
+        ds = PrecomputedSkipGramDataset(file_dir=file_dir, context_words=context_words)
+        self.loader = SkipGramDataLoader(train_dataset=ds.get_context_target_words(),
+                                         batch_size=batch_size, shuffle=shuffle)
 
-class PrecomputedSkipGramataset():
-    def __init__(self, file_dir="word2Vec/dataset.txt", batch_size=8, context_words=4, shuffle=True):
-        self.tokenized_content = CorpusBuilder("word2Vec/dataset.txt").get_tokenized_list()
-        self.vocab_stoi, self.vocab_itos = Vocabulary(self.tokenized_content).get_vocabulary()
-        self.batch_size = batch_size
-        self.context_words = context_words
-        self.shuffle = shuffle
-        self.pad = '<pad>'
-        self.unknown = '<unknown>'
-        
-    def get_context_target_words(self):
-        target_context_list = []
-        for sentence in self.tokenized_content:
-            target_context_words = []
-            for ind, token in enumerate(sentence):
-                for window_ind in range(self.context_words):
-                    if ind - window_ind >= 0:
-                        target_context_words.append(self.vocab_stoi[sentence[ind - 1]])
-                    if ind + window_ind < len(sentence):
-                        target_context_words.append(self.vocab_stoi[sentence[ind + 2]])
-                if len(target_context_words) > 0:
-                    target_context_list.append([target_context_words, self.vocab_stoi[token]])
-        return target_context_list
-        
+        vocab_size = len(ds.vocab_stoi)
+        self.model = SkipGram(input_size=vocab_size, output_size=vocab_size, embeding_size=embeding_size)
+        self.criterion = nn.CrossEntropyLoss()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model = self.model.to(self.device)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+
+    def __call__(self):
+        self.model.train()
+        for i in range(self.epochs):
+            total_loss, batches = 0.0, 0
+            for b, (centers, contexts) in enumerate(
+                tqdm(self.loader, desc=f"Epoch {i+1}/{self.epochs} - Training",
+                     unit="batch", dynamic_ncols=True, leave=False),
+                start=1
+            ):
+                centers  = centers.to(self.device)   # [B]
+                contexts = contexts.to(self.device)  # [B]  (class ids)
+
+                logits = self.model(centers)         # [B, V]
+                loss = self.criterion(logits, contexts)
+
+                self.optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                self.optimizer.step()
+
+                total_loss += loss.item()
+                batches += 1
+
+            avg = total_loss / max(1, batches)
+            print(f"epoch {i+1}/{self.epochs} - loss: {avg:.4f}")
+
+
+class SkipGram(nn.Module):
+    def __init__(self, input_size, output_size, embeding_size, pad_id=0):
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.embeding_size = embeding_size
+
+        dev = 1.0 / (self.embeding_size ** 0.5)
+        self.W_in  = nn.Parameter(torch.empty(self.input_size, self.embeding_size).uniform_(-dev, dev))  # [V, D]
+        self.W_out = nn.Parameter(torch.zeros(self.embeding_size, self.output_size))                      # [D, V]
+
+    def forward(self, centers: torch.Tensor):
+        """
+        centers: LongTensor [B] of center word ids
+        returns: logits [B, V] over context vocabulary
+        """
+        h = self.W_in[centers]        # [B, D]
+        logits = h @ self.W_out       # [B, V]
+        return logits
+
+    def get_embeddings(self):
+        return self.W_in.detach()
+
+
+if __name__ == "__main__":
+    def main():
+        import os
+        torch.manual_seed(0)
+
+        data_path = "word2Vec/dataset.txt"
+        if not os.path.isfile(data_path):
+            raise FileNotFoundError(f"Expected corpus at: {data_path}")
+
+        m = Model(
+            file_dir=data_path,
+            context_words=4,
+            batch_size=64,
+            shuffle=True,
+            embeding_size=128,
+            epochs=2,
+        )
+
+        # sanity check first batch
+        centers, contexts = next(iter(m.loader))
+        print(f"First batch shapes — centers: {tuple(centers.shape)}, contexts: {tuple(contexts.shape)}")
+
+        m()
+        print("✓ Training run completed.")
+    main()
