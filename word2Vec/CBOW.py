@@ -37,6 +37,7 @@ class Model():
                 batches += 1
             avg = total_loss / max(1, batches)
             print(f"epoch {i+1}/{self.epochs} - loss: {avg:.4f}")
+            
                 
         
 class CBOW(nn.Module):
@@ -62,6 +63,9 @@ class CBOW(nn.Module):
         logits = h @ self.W_out                               
         return logits
     
+    def get_embeddings(self, kind: str = "in", normalize: bool = False):
+        E = self.W_in
+        return E.detach()
     
 if __name__ == "__main__":
     def main():
@@ -91,7 +95,7 @@ if __name__ == "__main__":
         )
 
         m()
-
+        
         print("✓ Training run completed.")
 
     main()
