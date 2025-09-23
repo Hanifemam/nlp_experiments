@@ -2,13 +2,13 @@ from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 from collections import Counter
 import torch
+import re
 
 def tokenizer():
     tokenizer = get_tokenizer("basic_english")
     with open("word2Vec/dataset.txt", "r", encoding="utf-8") as f:
-        raw = f.read().split('\n')
-        
-    sentence = [s for s in raw.split('.') if s.strip()]
+        raw = f.read().lower().strip().replace(',', '').replace(';', '').replace(':', '').replace('!', '.').replace('?', '.')
+    sentence = [s for s in re.split(r'[.\n\t]', raw) if s.strip()]
     tokenized = [tokenizer(s) for s in sentence]
     
     
@@ -22,9 +22,9 @@ def dictionary():
     vocab = build_vocab_from_iterator(tokenized, min_freq=min_freq, specials=specials, special_first=True)
     vocab.set_default_index(vocab["<unknown>"])
     
-    id_vocab = [vocab[tokens] for tokens in tokenized]
+    id_vocab = [vocab[token] for tokens in tokenized for token in tokens]
     
-    return vocab, id_vocab
+    return vocab.get_stoi(), id_vocab
 
 def negative_samples():
     tokenized = tokenizer()
@@ -34,7 +34,7 @@ def negative_samples():
     
     V = len(vocab)
     counts = torch.zeros(V, dtype=torch.float)
-    stoi = vocab.get_stoi()
+    stoi = vocab
     for tok, c in freq.items():
         if tok in stoi:
             counts[stoi[tok]] = float(c)
@@ -43,3 +43,4 @@ def negative_samples():
 
     probs = counts.pow(0.75)
     probs = probs / probs.sum().clamp(min=1e-12)   # safe normalize
+    return probs

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from tqdm.auto import tqdm
-from skipgram_dataloader import PrecomputedSkipGramDataset, SkipGramDataLoader
+
 
 class Model():
     def __init__(self, file_dir="word2Vec/dataset.txt", context_words=4, batch_size=8,
