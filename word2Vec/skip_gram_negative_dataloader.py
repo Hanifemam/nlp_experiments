@@ -32,15 +32,15 @@ def make_collate_fn(probs: torch.Tensor, K: int = 5):
         return centers, pos, neg 
     return collate
 
-# loader = DataLoader(
-#     pos_neg_samples(),
-#     batch_size=256,
-#     shuffle=True,
-#     num_workers=0,                 
-#     pin_memory=torch.cuda.is_available(),
-#     drop_last=True,               
-#     collate_fn=make_collate_fn(negative_samples(), K=5),
-# )
+loader = DataLoader(
+    pos_neg_samples(),
+    batch_size=256,
+    shuffle=True,
+    num_workers=0,                 
+    pin_memory=torch.cuda.is_available(),
+    drop_last=True,               
+    collate_fn=make_collate_fn(negative_samples(), K=5),
+)
 
 if __name__ == "__main__":
     def main():
