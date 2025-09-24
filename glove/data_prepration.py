@@ -30,7 +30,7 @@ def dictionary():
 def cooccurrence_matrix(window_length=4):
     vocab, _ = dictionary()
     V = len(vocab)
-    X = torch.tensor(torch.zeros([V, V]), dtype=torch.long)
+    X = torch.tensor(torch.zeros([V, V]), dtype=torch.float32)
     sentences = tokenizer()
     
     for sentence in sentences:
@@ -60,10 +60,5 @@ if __name__ == "__main__":
     uniq = torch.unique(X)
     print("unique values (sample):", uniq[:10].tolist(), " ... total:", uniq.numel())
 
-    # quick warning if weights got truncated to integers
-    if not X.dtype.is_floating_point:
-        print("⚠️  Warning: integer dtype drops 1/j fractions to 0 for j>1. "
-              "Use float (e.g., torch.float32) if you expect fractional weights.")
-    else:
-        has_fraction = torch.any((uniq - torch.floor(uniq)) != 0).item()
-        print("has fractional weights:", bool(has_fraction))
+    has_fraction = torch.any((uniq - torch.floor(uniq)) != 0).item()
+    print("has fractional weights:", bool(has_fraction))
