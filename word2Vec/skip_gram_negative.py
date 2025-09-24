@@ -4,15 +4,12 @@ import torch.nn.functional as F
 from tqdm.auto import tqdm
 
 import skip_gram_negative_dataloader
-# from skipgram_negative_data_prepration import dictionary  # ❌ not needed for sizing
 
 class Model():
     def __init__(self, file_dir="word2Vec/dataset.txt", context_words=4, batch_size=8,
                  shuffle=True, embeding_size=128, epochs=10, lr=1e-3):
-        # must yield (centers, pos, neg)
         self.loader = skip_gram_negative_dataloader.loader
 
-        # ✅ Size the model from loader IDs (single source of truth)
         max_id = -1
         for centers, pos, neg in self.loader:
             bmax = max(
@@ -23,7 +20,6 @@ class Model():
             if bmax > max_id:
                 max_id = bmax
         vocab_size = max_id + 1
-        # (DataLoader can be iterated again later; this pass doesn't "consume" it permanently.)
 
         self.model = SkipGramNegative(input_size=vocab_size, output_size=vocab_size, embeding_size=embeding_size)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

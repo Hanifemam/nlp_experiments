@@ -13,8 +13,8 @@ for vocab1 in vocab.keys():
         words_list.append([vocab[vocab1], vocab[vocab2]])
         occurrence_list.append(X[vocab[vocab1]][vocab[vocab2]])
         
-words_tensor = torch.tensor(words_list, dtype=torch.float32)
-occurrence_tensor = torch.tensor(occurrence_list, dtype=torch.float32)
+words_tensor = torch.tensor(words_list, dtype=torch.long)
+occurrence_tensor = torch.tensor(occurrence_list, dtype=torch.long)
 dataset = TensorDataset(words_tensor, occurrence_tensor)
 
 loader = DataLoader(
