@@ -17,6 +17,3 @@ def vocab():
     vocab.set_default_index(vocab["<unknown>"])
     
     return vocab.get_stoi(), vocab.get_itos
-
-print(tokenizer())
-print(vocab())
