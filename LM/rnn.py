@@ -33,7 +33,16 @@ class RNN(nn.Module):
     def forward(self, X):
         B, T, I = X.shape
         h = self.init_hidden(batch_size=B, device=self.device) # (B, H)
+        outs = []
         
+        for t in range(T):
+            x_t = X[:, t, :] # [B,I]
+            a = x_t @ self.W_xh + h @ self.W_hh + self.b_h
+            h = torch.tanh(a)                # (B, H)
+            y_t = h @ self.W_hy + self.b_y   # (B, O)
+            outs.append(y_t)
+        Y = torch.stack(outs, dim=1)         # (B, T, O)
+        return Y, h
         
 
         
