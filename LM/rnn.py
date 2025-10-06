@@ -65,7 +65,6 @@ class Model(nn.Module):
                  hidden_size=128, lr=1e-3):
         super().__init__()
 
-        # device FIRST, so we can .to(self.device) later
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # --- data ---
@@ -96,7 +95,6 @@ class Model(nn.Module):
         self.seq_len = seq_len
         self.batch_size = batch_size
 
-        # move whole composite module (embed + rnn, etc.)
         self.to(self.device)
 
     def forward(self, x_ids):
