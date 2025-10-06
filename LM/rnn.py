@@ -3,7 +3,11 @@ from torch import nn
 import torch.nn.init as init
 from tqdm.auto import tqdm
 
-from data_prepration import tokenizer
+from data_preparation import tokenizer
+
+class Model():
+    def __init__(self):
+        pass
 
 class RNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
