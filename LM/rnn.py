@@ -2,13 +2,38 @@ import torch
 from torch import nn
 import torch.nn.init as init
 from tqdm.auto import tqdm
+from torch.utils.data import Dataset, DataLoader
+from torchtext.vocab import Vocab
+from collections import Counter
 
-from data_preparation import tokenizer
+from data_preparation import tokenizer, vocab
 
-class Model():
+class Model(nn.Module):
     def __init__(self):
+        flat_tokens = [tok for sent in tokenizer() for tok in sent]
+        vocab_stoi = vocab().get_stoi
+        token_ids = [vocab_stoi[token] for token in flat_tokens]
+        dataset_class = LanguageModelDataset(token_ids, 4)
+        dataset = dataset_class()
+        loader = DataLoader(dataset, batch_size=2, shuffle=True)
+    
+    def __call__(self):
         pass
-
+    
+class LanguageModelDataset(Dataset):
+    def __init__(self, tokens, seq_len):
+        self.data = tokens
+        self.seq_len = seq_len
+    
+    def __len__(self):
+        return len(self.data) - self.seq_len
+    
+    def __getitem__(self, idx):
+        x = torch.tensor(self.data[idx: idx + self.seq_len], dtype=torch.long)
+        y = torch.tensor(self.data[idx + 1: idx + 1 + self.seq_len], dtype=torch.long)
+        return x, y
+    
+        
 class RNN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super().__init__()
