@@ -33,3 +33,6 @@ class BiRNNDataSet(Dataset):
         y = torch.tensor(self.dataset[index + 1 : index + self.seq_len + 1], dtype=torch.long) #(T, )
         return x, y
     
+class BiRNN(nn.Module):
+    def __init__(self):
+        super().__init__()
