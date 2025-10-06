@@ -1,7 +1,7 @@
 from collections import Counter
 import numpy as np
 
-from data_prepration import tokenizer
+from LM.data_preparation import tokenizer
 
 class data_prepration():
     def __init__(self):

@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 
-from data_prepration import dictionary, cooccurrence_matrix
+from glove.data_preparation import dictionary, cooccurrence_matrix
 
 X = cooccurrence_matrix()
 vocab, _ = dictionary()
