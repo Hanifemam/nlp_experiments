@@ -36,12 +36,35 @@ class Model(nn.Module):
         
     def forward(self, x_ids):
         X = self.embed(x_ids)       # (B, T, E)
-        logits, _ = self.birnn(X)     # (B, T, V)
+        logits, _, _ = self.birnn(X)     # (B, T, V)
         return logits
     
     def train_loop(self):
         self.train()
-        
+        for epoch in range(1, self.epochs + 1):
+            total_loss, batches = 0.0, 0
+            for x, y in tqdm(self.loader, desc=f"Epoch {epoch}/{self.epochs}",
+                             unit="batch", dynamic_ncols=True, leave=False):
+                x = x.to(self.device)  # (B, T)
+                y = y.to(self.device)  # (B, T)
+
+                logits = self.forward(x)             # (B, T, V)
+                B, T, V = logits.shape
+                loss = self.criterion(
+                    logits.reshape(B * T, V),
+                    y.reshape(B * T)
+                )
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                total_loss += loss.item()
+                batches += 1
+
+            avg = total_loss / max(1, batches)
+            print(f"epoch {epoch}/{self.epochs} - loss: {avg:.4f}")
+            
 
         
         
@@ -118,4 +141,66 @@ class BiRNN(nn.Module):
         
         
         
-        
+# ===== test script =====
+
+def set_seed(seed=42):
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+if __name__ == "__main__":
+    set_seed(42)
+
+    # --- hyperparams for a quick smoke test ---
+    SEQ_LEN      = 8
+    BATCH_SIZE   = 64
+    EMBED_DIM    = 64
+    EPOCHS       = 1
+    LR           = 1e-3
+
+    # instantiate your model
+    model = Model(
+        seq_len=SEQ_LEN,
+        batch_size=BATCH_SIZE,
+        embedding_dim=EMBED_DIM,
+        epochs=EPOCHS,
+        lr=LR,
+        shuffle=True,
+        drop_last=True,
+    )
+
+    print(f"device: {model.device}")
+    print(f"vocab size: {model.vocab_size}")
+    print(f"num batches: {len(model.loader)}")
+
+    # --- quick forward pass sanity check on one mini-batch ---
+    model.eval()
+    with torch.no_grad():
+        for x_ids, y_ids in model.loader:
+            x_ids = x_ids.to(model.device)   # (B, T)
+            y_ids = y_ids.to(model.device)   # (B, T)
+            logits = model(x_ids)            # (B, T, V)
+            B, T, V = logits.shape
+            print(f"forward OK -> logits shape: {logits.shape} (B={B}, T={T}, V={V})")
+            # show top-3 next-token predictions for the first example, first timestep
+            topk = logits[0, 0].softmax(-1).topk(3)
+            print(f"top-3 probs @ t=0: {topk.values.tolist()} | idx: {topk.indices.tolist()}")
+            break
+
+    # --- train for a couple of epochs ---
+    print("\nstarting training…")
+    model.train_loop()
+
+    # --- optional: save a checkpoint ---
+    ckpt_path = "birnn_checkpoint.pt"
+    torch.save(
+        {
+            "model_state": model.state_dict(),
+            "vocab_size": model.vocab_size,
+            "embed_dim": EMBED_DIM,
+            "seq_len": SEQ_LEN,
+        },
+        ckpt_path,
+    )
+    print(f"saved checkpoint to {ckpt_path}")
+
