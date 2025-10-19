@@ -6,9 +6,10 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
+import torch.nn.utils
 
 class Model(nn.Module):
-    def __init__(self, batch_size, shuffle=True, drop_last=True):
+    def __init__(self, batch_size, shuffle=True, drop_last=True, emb_size = 128, epochs = 10, lr=1e-3):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         raw_train = pd.read_csv("translation/data/train.csv", delimiter=',')
@@ -22,7 +23,7 @@ class Model(nn.Module):
         PAD, SOS, EOS, UNK = "<pad>", "<sos>", "<eos>", "<unknown>"
         vocab_eng = build_vocab_from_iterator(
             (src for src, _ in tokenized_train + tokenized_val),
-            specials=["<pad>", "<sos>", "<eos>", "<unknown>"],
+            specials=[PAD, SOS, EOS, UNK],
             special_first=True,
             min_freq=1
         )
@@ -30,7 +31,7 @@ class Model(nn.Module):
 
         vocab_latin = build_vocab_from_iterator(
             (tgt for _, tgt in tokenized_train + tokenized_val),
-            specials=["<pad>", "<sos>", "<eos>", "<unknown>"],
+            specials=[PAD, SOS, EOS, UNK],
             special_first=True,
             min_freq=1
         )
@@ -84,6 +85,21 @@ class Model(nn.Module):
             drop_last=False,
             collate_fn=self.collate_fn
         )
+
+        self.model = STSLstm(
+            src_vocab_size=len(self.vocab_eng),
+            tgt_vocab_size=len(self.vocab_latin),
+            emb_size=emb_size,            
+            hidden_size=256,
+            num_layers=1,
+            pad_idx_src=self.pad_src,
+            pad_idx_tgt=self.pad_tgt
+        ).to(self.device)
+
+        self.criterion = nn.CrossEntropyLoss(ignore_index=self.pad_tgt)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr) 
+        self.epochs = epochs
+        self.batch_size = batch_size
     
     def collate_fn(self, batch):
         src_seqs, tgt_seqs = zip(*batch)
@@ -98,6 +114,90 @@ class Model(nn.Module):
         src = pad_to_tensor(src_seqs, self.pad_src)
         tgt = pad_to_tensor(tgt_seqs, self.pad_tgt)
         return src, tgt
+    
+    def train_one_epoch(self, epoch: int):
+        self.model.train()
+        total_loss = 0.0
+        for src, tgt in tqdm(self.loader, desc=f"Epoch {epoch}/{self.epochs}",
+                            unit="batch", dynamic_ncols=True, leave=False):
+            src = src.to(self.device)
+            tgt = tgt.to(self.device) 
+            
+            tgt_in = tgt[:, :-1]
+            tgt_out = tgt[:, 1:]
+            
+            logits = self.model(src, tgt_in)    # (B, T-1, V)
+            B, Tm1, V = logits.shape
+            
+            loss = self.criterion(
+            logits.reshape(B*Tm1, V),
+            tgt_out.reshape(B*Tm1)
+            )
+            self.optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            self.optimizer.step()
+            
+            total_loss += loss.item()
+            
+            tqdm.write(f"batch_loss={loss.item():.4f}") if False else None 
+            
+        avg_loss = total_loss / len(self.loader)
+        return avg_loss
+    
+    @torch.no_grad()
+    def validate_one_epoch(self):
+        self.model.eval()
+        total_loss = 0.0
+        for src, tgt in self.val_loader:
+            src = src.to(self.device)
+            tgt = tgt.to(self.device)
+
+            tgt_in  = tgt[:, :-1]
+            tgt_out = tgt[:,  1:]
+
+            logits = self.model(src, tgt_in)
+            B, Tm1, V = logits.shape
+            loss = self.criterion(
+                logits.reshape(B*Tm1, V),
+                tgt_out.reshape(B*Tm1)
+            )
+            total_loss += loss.item()
+        return total_loss / len(self.val_loader)
+    
+    def fit(self):
+        history = {"train_loss": [], "val_loss": []}
+        for epoch in range(1, self.epochs + 1):
+            train_loss = self.train_one_epoch(epoch)
+            val_loss = self.validate_one_epoch() if len(self.val_loader) > 0 else float("nan")
+            history["train_loss"].append(train_loss)
+            history["val_loss"].append(val_loss)
+            print(f"Epoch {epoch}/{self.epochs}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
+        return history
+    
+    @torch.no_grad()
+    def greedy_decode(self, src, max_len=50):
+        self.model.eval()
+        src = src.to(self.device)
+        emb_src = self.model.src_emb(src)
+        _, (h, c) = self.model.encoder(emb_src)
+
+        B = src.size(0)
+        cur = torch.full((B, 1), self.sos, dtype=torch.long, device=self.device)
+        outputs = []
+
+        for _ in range(max_len):
+            dec_out, (h, c) = self.model.decoder(self.model.tgt_emb(cur), (h, c))
+            step_logits = self.model.proj(dec_out[:, -1:, :])   # (B,1,V)
+            next_tok = step_logits.argmax(dim=-1)               # (B,1)
+            outputs.append(next_tok)
+            cur = torch.cat([cur, next_tok], dim=1)
+            if (next_tok == self.eos).all():
+                break
+
+        return torch.cat(outputs, dim=1)  # (B, T_gen)
+
+
         
         
 
@@ -118,8 +218,28 @@ class TranslationDataset(Dataset):
         return x, y
         
 class STSLstm(nn.Module):
-    def __init__(self, input_size=128, hidden_size=256, num_layers=1):
+    def __init__(self, src_vocab_size, tgt_vocab_size, emb_size=128, hidden_size=256, num_layers=1,
+                 pad_idx_src=0, pad_idx_tgt=0):
         super().__init__()
-        self.model = nn.LSTM()
+        self.src_emb = nn.Embedding(src_vocab_size, emb_size, padding_idx=pad_idx_src)
+        self.tgt_emb = nn.Embedding(tgt_vocab_size, emb_size, padding_idx=pad_idx_tgt)
+        self.encoder = nn.LSTM(input_size=emb_size, hidden_size=hidden_size,
+                               num_layers=num_layers, batch_first=True)
+        self.decoder = nn.LSTM(input_size=emb_size, hidden_size=hidden_size,
+                               num_layers=num_layers, batch_first=True)
+        self.proj = nn.Linear(hidden_size, tgt_vocab_size)
+        
+    def forward(self, src, tgt_in):
+        enc_out, (h, c) = self.encoder(self.src_emb(src))
+        dec_out, _ = self.decoder(self.tgt_emb(tgt_in), (h, c))
+        logits = self.proj(dec_out)
+        return logits
+    
         
 
+m = Model(batch_size=32, epochs=100, lr=1e-3)
+history = m.fit()
+
+# Try decoding on a small test batch
+src_batch, _ = next(iter(m.test_loader))
+pred_ids = m.greedy_decode(src_batch[:4], max_len=30)
