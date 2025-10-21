@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
-import torch.nn.utils
+from torch.nn.utils.clip_grad import clip_grad_norm_
 
 class Model(nn.Module):
     def __init__(self, batch_size, shuffle=True, drop_last=True, emb_size = 128, epochs = 10, lr=1e-3):
@@ -135,7 +135,7 @@ class Model(nn.Module):
             )
             self.optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
             
             total_loss += loss.item()
