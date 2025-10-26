@@ -113,8 +113,7 @@ class Model(nn.Module):
             src, tgt, lengths = src.to(self.device), tgt.to(self.device), lengths.to(self.device)
 
             # Forward pass
-            logits = self.model(src, lengths)  
-            logits = self.model(src, tgt)
+            logits = self.model(src, lengths)
             loss = self.criterion(logits, tgt)
             self.optimizer.zero_grad()
             loss.backward()
@@ -132,8 +131,7 @@ class Model(nn.Module):
         self.model.eval()
         total_loss = 0.0
         for src, tgt, lengths in self.val_loader:
-            src = src.to(self.device)
-            tgt = tgt.to(self.device)
+            src, tgt, lengths = src.to(self.device), tgt.to(self.device), lengths.to(self.device) 
             logits = self.model(src, lengths)
             loss = self.criterion(
                 logits,
@@ -141,8 +139,19 @@ class Model(nn.Module):
             )
             total_loss += loss.item()
         return total_loss / len(self.val_loader)
+    
+    def fit(self):
+        history = {"train_loss": [], "val_loss": []}
+        for epoch in range(1, self.epochs + 1):
+            train_loss = self.train_one_epoch(epoch)
+            val_loss = self.validate_one_epoch() if len(self.val_loader) > 0 else float("nan")
+            history["train_loss"].append(train_loss)
+            history["val_loss"].append(val_loss)
+            print(f"Epoch {epoch}/{self.epochs}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
+        return history
         
     def label_conv_dict(self):
         return {"negative": 0,
                  "neutral": 1, 
                  "positive": 2}
+        
