@@ -35,6 +35,7 @@ EOF
 git add .gitignore
 git commit -m "chore: ignore datasets, models, plots, and large artifacts"
 
+*dataset
 # Distribution / packaging
 .Python
 build/
