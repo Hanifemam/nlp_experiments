@@ -172,4 +172,5 @@ class EntityLSTM(nn.Module):
         enc_out, (h, c) = self.encoder(self.src_emb(src))
         logits = self.proj(enc_out)
         return logits
-model = Model()
+m = Model(batch_size=8, epochs=100, lr=1e-3)
+history = m.fit()
