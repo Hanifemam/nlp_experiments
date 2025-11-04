@@ -1,3 +1,4 @@
+import math  # Changed: required for sinusoidal positional encoding
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
@@ -76,9 +77,15 @@ class Model(nn.Module):
             drop_last=False,
             collate_fn=self.collate_fn
         )
-        self.model = EntityLSTM(
-            len(vocab_eng), len(vocab_tags),
+        self.model = EntityTransformer(  # Changed: use Transformer encoder by default
+            vocab_size=len(vocab_eng),
+            tag_size=len(vocab_tags),
+            pad_idx=self.pad_word_idx,
         ).to(self.device)
+        # self.model = EntityLSTM(  # Uncomment to switch back to LSTM baseline
+        #     src_vocab_size=len(vocab_eng),
+        #     category_size=len(vocab_tags),
+        # ).to(self.device)
 
         self.criterion = nn.CrossEntropyLoss(ignore_index=self.pad_tag_idx)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr) 
@@ -104,8 +111,8 @@ class Model(nn.Module):
                             unit="batch", dynamic_ncols=True, leave=False):
             src = src.to(self.device)
             tgt = tgt.to(self.device)
-            
-            logits = self.model(src)
+            padding_mask = (src == self.pad_word_idx)  
+            logits = self.model(src, src_key_padding_mask=padding_mask)
             B, T, C = logits.shape  
             loss = self.criterion(
                 logits.view(B * T, C),  
@@ -130,7 +137,8 @@ class Model(nn.Module):
             src = src.to(self.device)
             tgt = tgt.to(self.device)
 
-            logits = self.model(src)
+            padding_mask = (src == self.pad_word_idx)  
+            logits = self.model(src, src_key_padding_mask=padding_mask)
             B, T, C = logits.shape  
             loss = self.criterion(
                 logits.view(B * T, C),  
@@ -160,17 +168,63 @@ class EntityDataset(Dataset):
     def __getitem__(self, idx):
         return self.dataset[idx]
     
-class EntityLSTM(nn.Module):
-    def __init__(self, src_vocab_size, category_size, emb_size=128, hidden_size=256, num_layers=1):
+class EntityTransformer(nn.Module):
+    def __init__(self, vocab_size, tag_size, emb_size=128, n_heads=4, ff_dim=256, num_layers=2, dropout=0.1, pad_idx=0):
         super().__init__()
-        self.src_emb = nn.Embedding(src_vocab_size, emb_size)
-        self.encoder = nn.LSTM(input_size=emb_size, hidden_size=hidden_size,
-                               num_layers=num_layers, batch_first=True)
+        self.embedding = nn.Embedding(vocab_size, emb_size, padding_idx=pad_idx)
+        self.pos_encoding = PositionalEncoding(emb_size, dropout=dropout) 
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=emb_size,
+            nhead=n_heads,
+            dim_feedforward=ff_dim,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers)
+        self.proj = nn.Linear(emb_size, tag_size)
+
+    def forward(self, src, src_key_padding_mask=None):
+        x = self.embedding(src)
+        x = self.pos_encoding(x)  
+        x = self.encoder(x, src_key_padding_mask=src_key_padding_mask)
+        return self.proj(x)
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+
+        position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2, dtype=torch.float32) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, d_model, dtype=torch.float32)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x):
+        encoding = self.pe[:, : x.size(1)].to(x.device, dtype=x.dtype)  
+        x = x + encoding
+        return self.dropout(x)
+
+
+class EntityLSTM(nn.Module):
+    def __init__(self, src_vocab_size, category_size, emb_size=128, hidden_size=256, num_layers=1, pad_idx=0):
+        super().__init__()
+        self.src_emb = nn.Embedding(src_vocab_size, emb_size, padding_idx=pad_idx)
+        self.encoder = nn.LSTM(
+            input_size=emb_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=False,
+        )
         self.proj = nn.Linear(hidden_size, category_size)
-        
-    def forward(self, src):
-        enc_out, (h, c) = self.encoder(self.src_emb(src))
-        logits = self.proj(enc_out)
-        return logits
+
+    def forward(self, src, src_key_padding_mask=None):
+        x = self.src_emb(src)
+        enc_out, _ = self.encoder(x)
+        return self.proj(enc_out)
 m = Model(batch_size=8, epochs=100, lr=1e-3)
 history = m.fit()
