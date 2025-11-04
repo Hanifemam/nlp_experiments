@@ -121,6 +121,23 @@ class Model(nn.Module):
             
         avg_loss = total_loss / len(self.loader)
         return avg_loss
+    
+    @torch.no_grad()
+    def validate_one_epoch(self):
+        self.model.eval()
+        total_loss = 0.0
+        for src, tgt in self.val_loader:
+            src = src.to(self.device)
+            tgt = tgt.to(self.device)
+
+            logits = self.model(src)
+            B, T, C = logits.shape  
+            loss = self.criterion(
+                logits.view(B * T, C),  
+                tgt.view(B * T)         
+            )
+            total_loss += loss.item()
+        return total_loss / len(self.val_loader)
 
 class EntityDataset(Dataset):
     def __init__(self, dataset):
