@@ -138,6 +138,16 @@ class Model(nn.Module):
             )
             total_loss += loss.item()
         return total_loss / len(self.val_loader)
+    
+    def fit(self):
+        history = {"train_loss": [], "val_loss": []}
+        for epoch in range(1, self.epochs + 1):
+            train_loss = self.train_one_epoch(epoch)
+            val_loss = self.validate_one_epoch() if len(self.val_loader) > 0 else float("nan")
+            history["train_loss"].append(train_loss)
+            history["val_loss"].append(val_loss)
+            print(f"Epoch {epoch}/{self.epochs}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
+        return history
 
 class EntityDataset(Dataset):
     def __init__(self, dataset):
